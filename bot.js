@@ -1275,6 +1275,8 @@ function ghRateLimited(){
    بازیابی شکست بخورد، هیچ پوشی انجام نمی‌شود تا دیتای خالی جای بکاپ واقعی را نگیرد.
    با برگشتن سهمیه، خودکار رفع و بازیابی دوباره انجام می‌شود. */
 let cloudBlocked = false;
+/* v12.2.2: پرچم خاموشی نرم — حین دیپلوی نه ریکانکت، نه حذف سشن */
+let shuttingDown = false;
 async function ghQuotaOK(){
   /* بررسی سهمیه رایگان است — همه توکن‌ها چک می‌شوند و بهترین انتخاب می‌شود */
   for(let i = 0; i < GH_TOKENS.length; i++){
@@ -1620,6 +1622,8 @@ async function restoreAllFromGithub(){
     }
     const list = (index && Array.isArray(index.users)) ? index.users : [];
     console.log("☁️ بازیابی: " + list.length + " کاربر از گیت‌هاب");
+    /* v12.2.2: اتصال‌های بوت با فاصله و تصادفی — اگر کانتینر قبلی هنوز زنده بود تضاد پیش نیاید */
+    let bootIdx = 0;
     for(const item of list){
       try{
         const gid = item.gid;
@@ -1692,7 +1696,11 @@ async function restoreAllFromGithub(){
         u.loadLocal();
         /* اگر نشست دارد وصل شو (بدون QR) */
         if(fs.existsSync(path.join(u.authDir, "creds.json"))){
-          u.connect().catch(e => console.error("اتصال کاربر:", e.message));
+          const delay = 3000 + (bootIdx * 2000) + Math.floor(Math.random() * 2500);
+          bootIdx++;
+          setTimeout(() => {
+            if(!shuttingDown) u.connect().catch(e => console.error("اتصال کاربر:", e.message));
+          }, delay);
         }
       }catch(e){
         console.error("restore user:", e.message);
@@ -1728,12 +1736,22 @@ function startCloudTasks(){
 }
 
 process.on("SIGTERM", () => {
+  shuttingDown = true;
+  console.log("🛑 SIGTERM — خاموشی نرم آغاز شد (سوکت‌ها بسته می‌شوند، سشن‌ها حفظ می‌شوند)");
   if(!cloudEnabled()) process.exit(0);
   (async () => {
-    for(const gid of users.keys()) await backupUser(gid, "خاموشی");
+    /* ۱) سوکت‌ها فورا بسته شوند (بدون logout) تا نسخه جدید بدون تضاد وصل شود */
+    for(const [, u] of Array.from(users.entries())){
+      try{
+        if(u.sock){ try{ u.sock.end(undefined); }catch(e){} }
+        u.sock = null; u.connecting = false; u.connectionState = "disconnected";
+      }catch(e){}
+    }
+    /* ۲) فلاش کامل بکاپ — موازی برای جا شدن در پنجره خاموشی */
+    await Promise.allSettled(Array.from(users.keys()).map(gid => backupUser(gid, "خاموشی")));
     process.exit(0);
   })();
-  setTimeout(() => process.exit(0), 20000);
+  setTimeout(() => process.exit(0), 25000);
 });
 
 /* ==================================================
@@ -2231,6 +2249,7 @@ class UserBot {
 
   /* ---------- WHATSAPP ---------- */
   async connect(){
+    if(shuttingDown) return;
     if(this.connecting || this.sock) return;
     this.connecting = true;
     this.loggedOut = false;
@@ -2302,10 +2321,17 @@ class UserBot {
         console.log("❌ [" + this.gid.slice(0, 10) + "] قطع. کد:", code);
         if(loggedOut){
           this.loggedOut = true;
-          try{ if(fs.existsSync(this.authDir)) fs.rmSync(this.authDir, { recursive: true, force: true }); }catch(e){}
-          console.log("🚪 [" + this.gid.slice(0, 10) + "] نشست از واتساپ حذف شد — نیازمند QR جدید");
+          if(!shuttingDown){
+            try{ if(fs.existsSync(this.authDir)) fs.rmSync(this.authDir, { recursive: true, force: true }); }catch(e){}
+            console.log("🚪 [" + this.gid.slice(0, 10) + "] نشست از واتساپ حذف شد — نیازمند QR جدید");
+          }else{
+            console.log("🛑 [" + this.gid.slice(0, 10) + "] 401 در حالت خاموشی — سشن نگه داشته شد");
+          }
+        }else if(shuttingDown){
+          /* در حال خاموشی دوباره وصل نشو — نسخه جدید بدون تضاد وصل می‌شود */
         }else{
-          setTimeout(() => this.connect().catch(() => {}), 5000);
+          const wait = 5000 + Math.floor(Math.random() * 4000);
+          setTimeout(() => this.connect().catch(() => {}), wait);
         }
       }
     });
@@ -3911,7 +3937,7 @@ setInterval(() => {
   server.listen(PORT, () => {
     console.log("");
     console.log("🌐 پنل وب: http://localhost:" + PORT);
-    console.log("🤖 نسخه چندکاربره v12.1.0 — چندحسابی");
+    console.log("🤖 نسخه چندکاربره v12.2.2 — خاموشی نرم/حفظ سشن");
     console.log("🔑 OAuth گوگل:", googleOAuthConfigured() ? "فعال" : "❌ تنظیم نشده");
     console.log("💾 حداکثر بات هم‌زمان:", MAX_CONCURRENT_BOTS);
     console.log("🎯 تشخیص تکراری سخت‌گیرانه (Strict)");
