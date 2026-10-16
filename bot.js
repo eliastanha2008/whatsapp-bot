@@ -2578,7 +2578,7 @@ class UserBot {
           try{
             const rd = matched.data || {};
             const oldDate = formatDate(matched.timestamp)
-              + (rd.date ? "\n🧾 مورخ فیش: " + rd.date : "")
+              + (rd.date ? "\n" + rd.date : "")
               + (rd.time ? " — " + rd.time : "");
 
             await this.sock.sendMessage(msg.key.remoteJid, {
