@@ -1750,10 +1750,8 @@ const SLOT_SEP = "--";
 function slotKey(gid, slot){ return (slot && slot > 1) ? gid + SLOT_SEP + slot : gid; }
 /* پلن‌ها: فقط پرو و ویژه — تنها محدودیت، زمان اعتبار است (قابل تمدید) */
 const PLANS = {
-  pro:     { name: "پرو",  price: "۵۰۰ افغانی / ۳۰ روز", days: 30, maxSlots: 99, maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
-             features: ["اعتبار ۳۰ روز", "بدون محدودیت حساب، گروه و فیش", "قابل تمدید"] },
-  premium: { name: "ویژه", price: "۹۹۹ افغانی / ۶۰ روز", days: 60, maxSlots: 99, maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
-             features: ["اعتبار ۶۰ روز", "بدون محدودیت حساب، گروه و فیش", "قابل تمدید"] }
+  pro:     { name: "پرو",  price: "۲۵ دالر / ۳۰ روز", days: 30, maxSlots: 99, maxGroups: 0, dailyReceipts: 0, bothFeatures: true, features: [] },
+  premium: { name: "ویژه", price: "۴۵ دالر / ۶۰ روز", days: 60, maxSlots: 99, maxGroups: 0, dailyReceipts: 0, bothFeatures: true, features: [] }
 };
 
 function planInfo(gidBase){
