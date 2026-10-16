@@ -2577,9 +2577,7 @@ class UserBot {
         if(matched && matched.msgKey && matched.msgKey.id && matched.msgKey.remoteJid){
           try{
             const rd = matched.data || {};
-            const oldDate = formatDate(matched.timestamp)
-              + (rd.date ? "\n" + rd.date : "")
-              + (rd.time ? " — " + rd.time : "");
+            const oldDate = formatDate(matched.timestamp);
 
             await this.sock.sendMessage(msg.key.remoteJid, {
               text: oldDate
