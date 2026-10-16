@@ -2762,13 +2762,12 @@ let adminState = { users: {}, defaults: { allowDup: false, allowConfirm: false }
 /* کاربر تازه: هر دو بخش قفل تا مدیر از پنل فعال کند */
 /* v9.8.3: سیاست پیش‌فرض کاربران جدید — از پنل ادمین قابل تنظیم است */
 function adminDefaults(){
-  const d = adminState.defaults || {};
-  return { allowDup: !!d.allowDup, allowConfirm: !!d.allowConfirm };
+  /* v12.2.1: قفل‌ها حذف شد — همه قابلیت‌ها برای همه آزاد */
+  return { allowDup: true, allowConfirm: true };
 }
 function adminOverrides(gid){
-  /* v10.0.0: سیاست برای همه شماره‌های یک حساب یکی است */
-  gid = parseSlotKey(gid).gid;
-  return Object.assign(adminDefaults(), (adminState.users && adminState.users[gid]) || {});
+  /* v12.2.1: بدون قفل — کاربر خودش روشن/خاموش می‌کند، بدون خطا */
+  return { allowDup: true, allowConfirm: true };
 }
 function loadAdmin(){
   try{
@@ -2855,12 +2854,7 @@ app.get("/api/admin/users", (req, res) => {
       allowDup: ov.allowDup, allowConfirm: ov.allowConfirm,
       username: (credentials.users && Object.entries(credentials.users).find(([, c]) => c.gid === gid) || [])[0] || null,
       lastSeen: u.meta.lastSeen || null, createdAt: u.meta.createdAt || null,
-      /* v10.3.1: اطلاعات پلن برای پنل مدیریت جدا */
-      planType: planInfo(gid).type,
-      planName: PLANS[planInfo(gid).type].name,
-      planExpired: planInfo(gid).expired,
-      planExpiresAt: planInfo(gid).p.expires,
-      planDaysLeft: Math.max(0, Math.ceil((planInfo(gid).p.expires - Date.now()) / 86400000))
+      /* v12.2.1: بدون پلن */
     });
   }
   list.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
@@ -3682,24 +3676,8 @@ function listSlots(gid){
 
 /* v10.2: پلن اشتراک — مشاهده و فعال‌سازی (فعلاً کلیکی؛ پرداخت واقعی بعداً) */
 app.get("/api/plan", (req, res) => {
-  const gid = parseSlotKey(req.user.gid).gid;
-  const plans = Object.keys(PLANS).map(k => ({ type: k, name: PLANS[k].name, price: PLANS[k].price, features: PLANS[k].features, paid: k !== "free" }));
-  const info = planInfo(gid);
-  info.u.loadPlanReq();
-  const list = info.u.planReq || [];
-  const pending = list.find(r => r.status === "pending") || null;
-  let lastResult = null;
-  for(let i = list.length - 1; i >= 0; i--){
-    if(list[i].status !== "pending"){ lastResult = list[i]; break; }
-  }
-  res.json({
-    ok: true,
-    plan: planPublic(gid),
-    plans,
-    pay: { hesabpay: payState.hesabpay, autompay: payState.autompay || "", note: payState.note || "" },
-    request: pending ? { id: pending.id, type: pending.type, status: "pending", at: pending.at } : null,
-    lastResult: lastResult ? { type: lastResult.type, status: lastResult.status, at: lastResult.decidedAt || lastResult.at, reason: lastResult.reason || "" } : null
-  });
+  /* v12.2.1: سیستم پلن حذف شد */
+  res.json({ ok: true });
 });
 
 app.post("/api/plan/set", (req, res) => {
