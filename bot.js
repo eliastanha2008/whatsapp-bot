@@ -1,5 +1,5 @@
 /* ==================================================
-   WhatsApp AI Bot — نسخه چندکاربره (Multi-Tenant) v12.1.0 (گروه تأیید کننده + عکس نمایه گروه‌ها) (ورود با نام کاربری/رمز)
+   WhatsApp AI Bot — نسخه چندکاربره (Multi-Tenant) v9.8.9 (گروه تأیید کننده + عکس نمایه گروه‌ها) (ورود با نام کاربری/رمز)
    هر کاربر با گوگل وارد می‌شود → حساب جدا → شماره واتساپ خودش
    دیتای هر کاربر (فیش/تنظیمات/نشست) کاملاً ایزوله است
    ================================================== */
@@ -1275,8 +1275,6 @@ function ghRateLimited(){
    بازیابی شکست بخورد، هیچ پوشی انجام نمی‌شود تا دیتای خالی جای بکاپ واقعی را نگیرد.
    با برگشتن سهمیه، خودکار رفع و بازیابی دوباره انجام می‌شود. */
 let cloudBlocked = false;
-/* v12.2.2: پرچم خاموشی نرم — حین دیپلوی نه ریکانکت، نه حذف سشن */
-let shuttingDown = false;
 async function ghQuotaOK(){
   /* بررسی سهمیه رایگان است — همه توکن‌ها چک می‌شوند و بهترین انتخاب می‌شود */
   for(let i = 0; i < GH_TOKENS.length; i++){
@@ -1622,8 +1620,6 @@ async function restoreAllFromGithub(){
     }
     const list = (index && Array.isArray(index.users)) ? index.users : [];
     console.log("☁️ بازیابی: " + list.length + " کاربر از گیت‌هاب");
-    /* v12.2.2: اتصال‌های بوت با فاصله و تصادفی — اگر کانتینر قبلی هنوز زنده بود تضاد پیش نیاید */
-    let bootIdx = 0;
     for(const item of list){
       try{
         const gid = item.gid;
@@ -1696,11 +1692,7 @@ async function restoreAllFromGithub(){
         u.loadLocal();
         /* اگر نشست دارد وصل شو (بدون QR) */
         if(fs.existsSync(path.join(u.authDir, "creds.json"))){
-          const delay = 3000 + (bootIdx * 2000) + Math.floor(Math.random() * 2500);
-          bootIdx++;
-          setTimeout(() => {
-            if(!shuttingDown) u.connect().catch(e => console.error("اتصال کاربر:", e.message));
-          }, delay);
+          u.connect().catch(e => console.error("اتصال کاربر:", e.message));
         }
       }catch(e){
         console.error("restore user:", e.message);
@@ -1736,22 +1728,12 @@ function startCloudTasks(){
 }
 
 process.on("SIGTERM", () => {
-  shuttingDown = true;
-  console.log("🛑 SIGTERM — خاموشی نرم آغاز شد (سوکت‌ها بسته می‌شوند، سشن‌ها حفظ می‌شوند)");
   if(!cloudEnabled()) process.exit(0);
   (async () => {
-    /* ۱) سوکت‌ها فورا بسته شوند (بدون logout) تا نسخه جدید بدون تضاد وصل شود */
-    for(const [, u] of Array.from(users.entries())){
-      try{
-        if(u.sock){ try{ u.sock.end(undefined); }catch(e){} }
-        u.sock = null; u.connecting = false; u.connectionState = "disconnected";
-      }catch(e){}
-    }
-    /* ۲) فلاش کامل بکاپ — موازی برای جا شدن در پنجره خاموشی */
-    await Promise.allSettled(Array.from(users.keys()).map(gid => backupUser(gid, "خاموشی")));
+    for(const gid of users.keys()) await backupUser(gid, "خاموشی");
     process.exit(0);
   })();
-  setTimeout(() => process.exit(0), 25000);
+  setTimeout(() => process.exit(0), 20000);
 });
 
 /* ==================================================
@@ -1768,24 +1750,26 @@ const SLOT_SEP = "--";
 function slotKey(gid, slot){ return (slot && slot > 1) ? gid + SLOT_SEP + slot : gid; }
 /* v10.2: پلن‌های اشتراک — رایگان / پرو / ویژه */
 const PLANS = {
-  /* v12.2: پلن‌ها حذف شد — همه امکانات بدون محدودیت برای همه کاربران */
-  unlimited: { name: "نامحدود", price: "بدون محدودیت", days: 36500, maxSlots: 9999, maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
-             features: ["همه امکانات بدون محدودیت"] }
+  free:    { name: "رایگان", price: "۰ افغانی / هفته",     days: 7,  maxSlots: 1,  maxGroups: 7, dailyReceipts: 100, bothFeatures: false,
+             features: ["۱ حساب واتساپ", "حداکثر ۷ گروه", "۱۰۰ فیش در روز", "یک قابلیت همزمان (دریافت یا تأیید)", "اعتبار ۷ روز"] },
+  pro:     { name: "پرو",    price: "۵۰۰ افغانی / ماه",     days: 30, maxSlots: 3,  maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
+             features: ["تا ۳ حساب واتساپ", "گروه‌های نامحدود", "فیش نامحدود", "هر دو قابلیت همزمان", "تأیید و تأیید کننده بدون محدودیت", "اعتبار ۳۰ روز"] },
+  premium: { name: "ویژه",   price: "۹۹۹ افغانی / ۳ ماه",   days: 90, maxSlots: 20, maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
+             features: ["حساب‌های واتساپ نامحدود", "همه امکانات پرو", "همه امکانات جدید در آینده", "همه امکانات همزمان", "اعتبار ۹۰ روز"] }
 };
 
 function planInfo(gidBase){
   let u = users.get(gidBase);
   if(!u) u = ensureUser(gidBase, {});
   const now = Date.now();
-  /* v12.2: بدون پلن — همه کاربرها برای همیشه «نامحدود» */
   let p = u.meta.plan;
-  if(!p || p.type !== "unlimited"){
-    p = { type: "unlimited", at: (p && p.at) || now, expires: now + PLANS.unlimited.days * 86400000 };
+  if(!p || !PLANS[p.type]){
+    p = { type: "free", at: now, expires: now + PLANS.free.days * 86400000 };
     u.meta.plan = p;
     u.saveMeta();
   }
   const cfg = PLANS[p.type];
-  return { u, p, cfg, type: p.type, expired: false };
+  return { u, p, cfg, type: p.type, expired: now > p.expires };
 }
 
 function planPublic(gidBase){
@@ -2249,7 +2233,6 @@ class UserBot {
 
   /* ---------- WHATSAPP ---------- */
   async connect(){
-    if(shuttingDown) return;
     if(this.connecting || this.sock) return;
     this.connecting = true;
     this.loggedOut = false;
@@ -2321,17 +2304,10 @@ class UserBot {
         console.log("❌ [" + this.gid.slice(0, 10) + "] قطع. کد:", code);
         if(loggedOut){
           this.loggedOut = true;
-          if(!shuttingDown){
-            try{ if(fs.existsSync(this.authDir)) fs.rmSync(this.authDir, { recursive: true, force: true }); }catch(e){}
-            console.log("🚪 [" + this.gid.slice(0, 10) + "] نشست از واتساپ حذف شد — نیازمند QR جدید");
-          }else{
-            console.log("🛑 [" + this.gid.slice(0, 10) + "] 401 در حالت خاموشی — سشن نگه داشته شد");
-          }
-        }else if(shuttingDown){
-          /* در حال خاموشی دوباره وصل نشو — نسخه جدید بدون تضاد وصل می‌شود */
+          try{ if(fs.existsSync(this.authDir)) fs.rmSync(this.authDir, { recursive: true, force: true }); }catch(e){}
+          console.log("🚪 [" + this.gid.slice(0, 10) + "] نشست از واتساپ حذف شد — نیازمند QR جدید");
         }else{
-          const wait = 5000 + Math.floor(Math.random() * 4000);
-          setTimeout(() => this.connect().catch(() => {}), wait);
+          setTimeout(() => this.connect().catch(() => {}), 5000);
         }
       }
     });
@@ -2600,7 +2576,10 @@ class UserBot {
         const matched = result.matched;
         if(matched && matched.msgKey && matched.msgKey.id && matched.msgKey.remoteJid){
           try{
-            const oldDate = formatDate(matched.timestamp);
+            const rd = matched.data || {};
+            const oldDate = formatDate(matched.timestamp)
+              + (rd.date ? "\n🧾 مورخ فیش: " + rd.date : "")
+              + (rd.time ? " — " + rd.time : "");
 
             await this.sock.sendMessage(msg.key.remoteJid, {
               text: oldDate
@@ -2785,12 +2764,13 @@ let adminState = { users: {}, defaults: { allowDup: false, allowConfirm: false }
 /* کاربر تازه: هر دو بخش قفل تا مدیر از پنل فعال کند */
 /* v9.8.3: سیاست پیش‌فرض کاربران جدید — از پنل ادمین قابل تنظیم است */
 function adminDefaults(){
-  /* v12.2.1: قفل‌ها حذف شد — همه قابلیت‌ها برای همه آزاد */
-  return { allowDup: true, allowConfirm: true };
+  const d = adminState.defaults || {};
+  return { allowDup: !!d.allowDup, allowConfirm: !!d.allowConfirm };
 }
 function adminOverrides(gid){
-  /* v12.2.1: بدون قفل — کاربر خودش روشن/خاموش می‌کند، بدون خطا */
-  return { allowDup: true, allowConfirm: true };
+  /* v10.0.0: سیاست برای همه شماره‌های یک حساب یکی است */
+  gid = parseSlotKey(gid).gid;
+  return Object.assign(adminDefaults(), (adminState.users && adminState.users[gid]) || {});
 }
 function loadAdmin(){
   try{
@@ -2877,7 +2857,12 @@ app.get("/api/admin/users", (req, res) => {
       allowDup: ov.allowDup, allowConfirm: ov.allowConfirm,
       username: (credentials.users && Object.entries(credentials.users).find(([, c]) => c.gid === gid) || [])[0] || null,
       lastSeen: u.meta.lastSeen || null, createdAt: u.meta.createdAt || null,
-      /* v12.2.1: بدون پلن */
+      /* v10.3.1: اطلاعات پلن برای پنل مدیریت جدا */
+      planType: planInfo(gid).type,
+      planName: PLANS[planInfo(gid).type].name,
+      planExpired: planInfo(gid).expired,
+      planExpiresAt: planInfo(gid).p.expires,
+      planDaysLeft: Math.max(0, Math.ceil((planInfo(gid).p.expires - Date.now()) / 86400000))
     });
   }
   list.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
@@ -2964,12 +2949,12 @@ app.post("/api/admin/wipe-all", async (req, res) => {
 /* v10.3.1: تغییر دستی پلن کاربر از پنل مدیریت جدا */
 app.post("/api/admin/user-plan", (req, res) => {
   const gid = String(req.body.gid || "");
-  if(!gid) return res.status(400).json({ ok: false, error: "درخواست نامعتبر" });
+  const type = String(req.body.type || "");
+  if(!gid || !PLANS[type]) return res.status(400).json({ ok: false, error: "درخواست نامعتبر" });
   const u = users.get(gid);
   if(!u) return res.status(404).json({ ok: false, error: "کاربر پیدا نشد" });
   const now = Date.now();
-  /* v12.2: همه پلن‌ها = نامحدود */
-  u.meta.plan = { type: "unlimited", at: now, expires: now + PLANS.unlimited.days * 86400000 };
+  u.meta.plan = { type, at: now, expires: now + PLANS[type].days * 86400000 };
   u.saveMeta();
   backupSoon(`plan-admin-${gid.split("/")[0]}`);
   res.json({ ok: true, plan: planPublic(gid) });
@@ -3015,8 +3000,6 @@ app.post("/api/admin/credential-delete", (req, res) => {
 
 /* v10.3: فهرست درخواست‌های پرداخت برای ادمین */
 app.get("/api/admin/plan-requests", (req, res) => {
-  /* v12.2: سیستم پلن حذف شد */
-  return res.json({ ok: true, requests: [], count: 0 });
   const out = [];
   for(const [key, u] of users.entries()){
     if(!fs.existsSync(u.planReqFile)) continue;
@@ -3041,8 +3024,6 @@ app.get("/api/admin/plan-requests", (req, res) => {
 
 /* تأیید درخواست → فعال‌سازی پلن از همین لحظه */
 app.post("/api/admin/plan-request/approve", (req, res) => {
-  /* v12.2: سیستم پلن حذف شد */
-  return res.json({ ok: true, noop: true });
   const id = String((req.body || {}).id || "");
   const found = findPlanRequest(id);
   if(!found) return res.status(404).json({ ok: false, error: "درخواست پیدا نشد" });
@@ -3062,8 +3043,6 @@ app.post("/api/admin/plan-request/approve", (req, res) => {
 
 /* رد درخواست با دلیل */
 app.post("/api/admin/plan-request/reject", (req, res) => {
-  /* v12.2: سیستم پلن حذف شد */
-  return res.json({ ok: true, noop: true });
   const id = String((req.body || {}).id || "");
   const reason = String((req.body || {}).reason || "").trim().slice(0, 200) || "درخواست رد شد";
   const found = findPlanRequest(id);
@@ -3080,8 +3059,6 @@ app.post("/api/admin/plan-request/reject", (req, res) => {
 
 /* حذف درخواست (پاک‌سازی) */
 app.post("/api/admin/plan-request/delete", (req, res) => {
-  /* v12.2: سیستم پلن حذف شد */
-  return res.json({ ok: true, noop: true });
   const id = String((req.body || {}).id || "");
   const found = findPlanRequest(id);
   if(!found) return res.status(404).json({ ok: false, error: "درخواست پیدا نشد" });
@@ -3185,8 +3162,6 @@ app.get("/api/health", (req, res) => res.json({ ok: true, users: users.size, ts:
 
 /* ---------- GOOGLE OAUTH ---------- */
 app.get("/api/auth/google", (req, res) => {
-  /* v12.2: ورود با گوگل غیرفعال — فقط نام کاربری/رمز */
-  return res.status(403).json({ ok: false, error: "ورود با گوگل غیرفعال است — با نام کاربری و رمز وارد شوید" });
   if(!googleOAuthConfigured()){
     return res.status(500).send("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET تنظیم نشده است");
   }
@@ -3203,7 +3178,6 @@ app.get("/api/auth/google", (req, res) => {
 });
 
 app.get("/api/auth/google/callback", async (req, res) => {
-  return res.status(403).json({ ok: false, error: "ورود با گوگل غیرفعال است" });
   try{
     if(!googleOAuthConfigured()){
       return res.status(500).send("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET تنظیم نشده است");
@@ -3331,8 +3305,6 @@ app.post("/api/profile/username", (req, res) => {
 /* v9.8.5: ورود با نام کاربری/رمز عبور (بدون گوگل) */
 /* v9.9.4: ثبت‌نام خودِ کاربر از صفحه ورود (پنل مستقل هم پشتیبانی می‌کند) */
 app.post("/api/auth/register", (req, res) => {
-  /* v12.2: ثبت‌نام بسته است — کاربرها فقط از پنل مدیریت ساخته می‌شوند */
-  return res.status(403).json({ ok: false, error: "ثبت‌نام بسته است — برای حساب، به مدیر پیام بده" });
   /* ضد اسپم: حداکثر ۵ ثبت‌نام در ساعت از هر IP */
   const rip = req.ip || "x";
   const rl = regThrottle.get(rip) || { n: 0, until: 0 };
@@ -3699,14 +3671,27 @@ function listSlots(gid){
 
 /* v10.2: پلن اشتراک — مشاهده و فعال‌سازی (فعلاً کلیکی؛ پرداخت واقعی بعداً) */
 app.get("/api/plan", (req, res) => {
-  /* v12.2.1: سیستم پلن حذف شد */
-  res.json({ ok: true });
+  const gid = parseSlotKey(req.user.gid).gid;
+  const plans = Object.keys(PLANS).map(k => ({ type: k, name: PLANS[k].name, price: PLANS[k].price, features: PLANS[k].features, paid: k !== "free" }));
+  const info = planInfo(gid);
+  info.u.loadPlanReq();
+  const list = info.u.planReq || [];
+  const pending = list.find(r => r.status === "pending") || null;
+  let lastResult = null;
+  for(let i = list.length - 1; i >= 0; i--){
+    if(list[i].status !== "pending"){ lastResult = list[i]; break; }
+  }
+  res.json({
+    ok: true,
+    plan: planPublic(gid),
+    plans,
+    pay: { hesabpay: payState.hesabpay, autompay: payState.autompay || "", note: payState.note || "" },
+    request: pending ? { id: pending.id, type: pending.type, status: "pending", at: pending.at } : null,
+    lastResult: lastResult ? { type: lastResult.type, status: lastResult.status, at: lastResult.decidedAt || lastResult.at, reason: lastResult.reason || "" } : null
+  });
 });
 
 app.post("/api/plan/set", (req, res) => {
-  /* v12.2: همه کاربرها بدون پلن و بدون محدودیت هستند */
-  const gidS = parseSlotKey(req.user.gid).gid;
-  return res.json({ ok: true, plan: planPublic(gidS) });
   const gid = parseSlotKey(req.user.gid).gid;
   const type = String((req.body || {}).type || "");
   if(!PLANS[type]) return res.status(400).json({ ok: false, error: "پلن نامعتبر است" });
@@ -3723,8 +3708,6 @@ app.post("/api/plan/set", (req, res) => {
 
 /* v10.3: ارسال درخواست خرید پلن پولی + عکس رسید حسابپی */
 app.post("/api/plan/request", (req, res) => {
-  /* v12.2: سیستم پلن و خرید حذف شد */
-  return res.status(403).json({ ok: false, error: "سیستم پلن حذف شد — همه امکانات بدون محدودیت فعال است" });
   const gid = parseSlotKey(req.user.gid).gid;
   const type = String((req.body || {}).type || "");
   const method = (req.body || {}).method === "autompay" ? "autompay" : "hesabpay";
@@ -3937,7 +3920,7 @@ setInterval(() => {
   server.listen(PORT, () => {
     console.log("");
     console.log("🌐 پنل وب: http://localhost:" + PORT);
-    console.log("🤖 نسخه چندکاربره v12.2.2 — خاموشی نرم/حفظ سشن");
+    console.log("🤖 نسخه چندکاربره v10.0.0 — چندحسابی");
     console.log("🔑 OAuth گوگل:", googleOAuthConfigured() ? "فعال" : "❌ تنظیم نشده");
     console.log("💾 حداکثر بات هم‌زمان:", MAX_CONCURRENT_BOTS);
     console.log("🎯 تشخیص تکراری سخت‌گیرانه (Strict)");
