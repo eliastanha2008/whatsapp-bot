@@ -1750,26 +1750,24 @@ const SLOT_SEP = "--";
 function slotKey(gid, slot){ return (slot && slot > 1) ? gid + SLOT_SEP + slot : gid; }
 /* v10.2: پلن‌های اشتراک — رایگان / پرو / ویژه */
 const PLANS = {
-  free:    { name: "رایگان", price: "۰ افغانی / هفته",     days: 7,  maxSlots: 1,  maxGroups: 7, dailyReceipts: 100, bothFeatures: false,
-             features: ["۱ حساب واتساپ", "حداکثر ۷ گروه", "۱۰۰ فیش در روز", "یک قابلیت همزمان (دریافت یا تأیید)", "اعتبار ۷ روز"] },
-  pro:     { name: "پرو",    price: "۵۰۰ افغانی / ماه",     days: 30, maxSlots: 3,  maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
-             features: ["تا ۳ حساب واتساپ", "گروه‌های نامحدود", "فیش نامحدود", "هر دو قابلیت همزمان", "تأیید و تأیید کننده بدون محدودیت", "اعتبار ۳۰ روز"] },
-  premium: { name: "ویژه",   price: "۹۹۹ افغانی / ۳ ماه",   days: 90, maxSlots: 20, maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
-             features: ["حساب‌های واتساپ نامحدود", "همه امکانات پرو", "همه امکانات جدید در آینده", "همه امکانات همزمان", "اعتبار ۹۰ روز"] }
+  /* v12.2: پلن‌ها حذف شد — همه امکانات بدون محدودیت برای همه کاربران */
+  unlimited: { name: "نامحدود", price: "بدون محدودیت", days: 36500, maxSlots: 9999, maxGroups: 0, dailyReceipts: 0, bothFeatures: true,
+             features: ["همه امکانات بدون محدودیت"] }
 };
 
 function planInfo(gidBase){
   let u = users.get(gidBase);
   if(!u) u = ensureUser(gidBase, {});
   const now = Date.now();
+  /* v12.2: بدون پلن — همه کاربرها برای همیشه «نامحدود» */
   let p = u.meta.plan;
-  if(!p || !PLANS[p.type]){
-    p = { type: "free", at: now, expires: now + PLANS.free.days * 86400000 };
+  if(!p || p.type !== "unlimited"){
+    p = { type: "unlimited", at: (p && p.at) || now, expires: now + PLANS.unlimited.days * 86400000 };
     u.meta.plan = p;
     u.saveMeta();
   }
   const cfg = PLANS[p.type];
-  return { u, p, cfg, type: p.type, expired: now > p.expires };
+  return { u, p, cfg, type: p.type, expired: false };
 }
 
 function planPublic(gidBase){
@@ -2949,12 +2947,12 @@ app.post("/api/admin/wipe-all", async (req, res) => {
 /* v10.3.1: تغییر دستی پلن کاربر از پنل مدیریت جدا */
 app.post("/api/admin/user-plan", (req, res) => {
   const gid = String(req.body.gid || "");
-  const type = String(req.body.type || "");
-  if(!gid || !PLANS[type]) return res.status(400).json({ ok: false, error: "درخواست نامعتبر" });
+  if(!gid) return res.status(400).json({ ok: false, error: "درخواست نامعتبر" });
   const u = users.get(gid);
   if(!u) return res.status(404).json({ ok: false, error: "کاربر پیدا نشد" });
   const now = Date.now();
-  u.meta.plan = { type, at: now, expires: now + PLANS[type].days * 86400000 };
+  /* v12.2: همه پلن‌ها = نامحدود */
+  u.meta.plan = { type: "unlimited", at: now, expires: now + PLANS.unlimited.days * 86400000 };
   u.saveMeta();
   backupSoon(`plan-admin-${gid.split("/")[0]}`);
   res.json({ ok: true, plan: planPublic(gid) });
@@ -3000,6 +2998,8 @@ app.post("/api/admin/credential-delete", (req, res) => {
 
 /* v10.3: فهرست درخواست‌های پرداخت برای ادمین */
 app.get("/api/admin/plan-requests", (req, res) => {
+  /* v12.2: سیستم پلن حذف شد */
+  return res.json({ ok: true, requests: [], count: 0 });
   const out = [];
   for(const [key, u] of users.entries()){
     if(!fs.existsSync(u.planReqFile)) continue;
@@ -3024,6 +3024,8 @@ app.get("/api/admin/plan-requests", (req, res) => {
 
 /* تأیید درخواست → فعال‌سازی پلن از همین لحظه */
 app.post("/api/admin/plan-request/approve", (req, res) => {
+  /* v12.2: سیستم پلن حذف شد */
+  return res.json({ ok: true, noop: true });
   const id = String((req.body || {}).id || "");
   const found = findPlanRequest(id);
   if(!found) return res.status(404).json({ ok: false, error: "درخواست پیدا نشد" });
@@ -3043,6 +3045,8 @@ app.post("/api/admin/plan-request/approve", (req, res) => {
 
 /* رد درخواست با دلیل */
 app.post("/api/admin/plan-request/reject", (req, res) => {
+  /* v12.2: سیستم پلن حذف شد */
+  return res.json({ ok: true, noop: true });
   const id = String((req.body || {}).id || "");
   const reason = String((req.body || {}).reason || "").trim().slice(0, 200) || "درخواست رد شد";
   const found = findPlanRequest(id);
@@ -3059,6 +3063,8 @@ app.post("/api/admin/plan-request/reject", (req, res) => {
 
 /* حذف درخواست (پاک‌سازی) */
 app.post("/api/admin/plan-request/delete", (req, res) => {
+  /* v12.2: سیستم پلن حذف شد */
+  return res.json({ ok: true, noop: true });
   const id = String((req.body || {}).id || "");
   const found = findPlanRequest(id);
   if(!found) return res.status(404).json({ ok: false, error: "درخواست پیدا نشد" });
@@ -3162,6 +3168,8 @@ app.get("/api/health", (req, res) => res.json({ ok: true, users: users.size, ts:
 
 /* ---------- GOOGLE OAUTH ---------- */
 app.get("/api/auth/google", (req, res) => {
+  /* v12.2: ورود با گوگل غیرفعال — فقط نام کاربری/رمز */
+  return res.status(403).json({ ok: false, error: "ورود با گوگل غیرفعال است — با نام کاربری و رمز وارد شوید" });
   if(!googleOAuthConfigured()){
     return res.status(500).send("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET تنظیم نشده است");
   }
@@ -3178,6 +3186,7 @@ app.get("/api/auth/google", (req, res) => {
 });
 
 app.get("/api/auth/google/callback", async (req, res) => {
+  return res.status(403).json({ ok: false, error: "ورود با گوگل غیرفعال است" });
   try{
     if(!googleOAuthConfigured()){
       return res.status(500).send("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET تنظیم نشده است");
@@ -3305,6 +3314,8 @@ app.post("/api/profile/username", (req, res) => {
 /* v9.8.5: ورود با نام کاربری/رمز عبور (بدون گوگل) */
 /* v9.9.4: ثبت‌نام خودِ کاربر از صفحه ورود (پنل مستقل هم پشتیبانی می‌کند) */
 app.post("/api/auth/register", (req, res) => {
+  /* v12.2: ثبت‌نام بسته است — کاربرها فقط از پنل مدیریت ساخته می‌شوند */
+  return res.status(403).json({ ok: false, error: "ثبت‌نام بسته است — برای حساب، به مدیر پیام بده" });
   /* ضد اسپم: حداکثر ۵ ثبت‌نام در ساعت از هر IP */
   const rip = req.ip || "x";
   const rl = regThrottle.get(rip) || { n: 0, until: 0 };
@@ -3692,6 +3703,9 @@ app.get("/api/plan", (req, res) => {
 });
 
 app.post("/api/plan/set", (req, res) => {
+  /* v12.2: همه کاربرها بدون پلن و بدون محدودیت هستند */
+  const gidS = parseSlotKey(req.user.gid).gid;
+  return res.json({ ok: true, plan: planPublic(gidS) });
   const gid = parseSlotKey(req.user.gid).gid;
   const type = String((req.body || {}).type || "");
   if(!PLANS[type]) return res.status(400).json({ ok: false, error: "پلن نامعتبر است" });
@@ -3708,6 +3722,8 @@ app.post("/api/plan/set", (req, res) => {
 
 /* v10.3: ارسال درخواست خرید پلن پولی + عکس رسید حسابپی */
 app.post("/api/plan/request", (req, res) => {
+  /* v12.2: سیستم پلن و خرید حذف شد */
+  return res.status(403).json({ ok: false, error: "سیستم پلن حذف شد — همه امکانات بدون محدودیت فعال است" });
   const gid = parseSlotKey(req.user.gid).gid;
   const type = String((req.body || {}).type || "");
   const method = (req.body || {}).method === "autompay" ? "autompay" : "hesabpay";
