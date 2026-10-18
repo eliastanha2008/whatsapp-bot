@@ -3123,6 +3123,12 @@ app.post("/api/auth/login", (req, res) => {
 
 /* ---------- STATUS / DATA ---------- */
 
+/* v12.2.6: پنل کاربر روی خود سرور (هم‌دامنه با API — رفع مشکل کوکی iOS برای دسترسی افراد غیر ساԘاری) */
+app.get("/", (req, res) => {
+  try{ res.set("Cache-Control", "no-store"); res.sendFile(path.join(__dirname, "panel.html")); }
+  catch(e){ res.status(500).end(); }
+});
+
 app.get("/api/status", (req, res) => {
   const u = req.user;
   const ov = adminOverrides(u.gid);
