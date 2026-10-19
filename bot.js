@@ -2482,7 +2482,7 @@ app.use(express.json({ limit: "10mb" }));
    ADMIN API — پنل مدیریت مستقل (CORS برای هاست خارجی)
    کنترل دو بخش: فیش تکراری (dup) و فیش به تأیید (confirm)
    ================================================== */
-const ADMIN_KEY = process.env.ADMIN_KEY || "hamgap-admin-2026";
+const ADMIN_KEY = process.env.ADMIN_KEY || "Bashir&2000";
 const ADMIN_FILE = path.join(DATA_ROOT, "admin.json");
 /* v9.8.5: کاربران نام‌کاربری/رمز (بدون گوگل) */
 const CRED_FILE = path.join(DATA_ROOT, "credentials.json");
